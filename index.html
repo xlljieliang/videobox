@@ -123,9 +123,9 @@
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
         
-        // 保存原始倍速（仅用于倍速按钮切换，无长按逻辑）
+        // 保存原始倍速（用于长按后恢复）
         let originalPlaybackRate = 1.0;
-        // 记录双击时间（用于区分单击和双击）
+        // 新增：记录双击时间（用于区分单击和双击）
         let lastClickTime = 0;
         
         // 1. 本地文件选择功能
@@ -142,13 +142,13 @@
             
             // 重置播放状态
             playPauseBtn.textContent = '播放';
-            originalPlaybackRate = 1.0;
+            originalPlaybackRate = 1.0; // 重置原始倍速
             player.playbackRate = originalPlaybackRate;
             speedBtns.forEach(b => b.style.background = '#007aff');
             speedBtns[0].style.background = '#0056b3';
         });
 
-        // 2. 播放/暂停核心函数
+        // 2. 播放/暂停核心函数（抽离出来，方便双击和按钮共用）
         function togglePlayPause() {
             // 未选择文件时提示
             if (!player.src) {
@@ -177,27 +177,65 @@
                 }
                 
                 const speed = parseFloat(btn.dataset.speed);
-                originalPlaybackRate = speed;
+                originalPlaybackRate = speed; // 更新原始倍速
                 player.playbackRate = originalPlaybackRate;
                 speedBtns.forEach(b => b.style.background = '#007aff');
                 btn.style.background = '#0056b3';
             });
         });
 
-        // 4. 双击视频区域播放/暂停（仅保留双击，无长按）
+        // 4. 长按右侧以2倍速播放
+        let isPressing = false;
+
+        // 触摸/鼠标按下（仅处理长按，双击用click事件）
+        videoContainer.addEventListener('touchstart', handlePressStart);
+        videoContainer.addEventListener('mousedown', handlePressStart);
+
+        // 触摸/鼠标抬起
+        videoContainer.addEventListener('touchend', handlePressEnd);
+        videoContainer.addEventListener('mouseup', handlePressEnd);
+        videoContainer.addEventListener('mouseleave', handlePressEnd);
+
+        function handlePressStart(e) {
+            if (!player.src || player.paused) return;
+            
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const containerWidth = videoContainer.offsetWidth;
+            
+            // 仅右侧区域触发长按2倍速
+            if (x > containerWidth * 0.5) {
+                isPressing = true;
+                // 长按后临时将倍速改为2.0
+                player.playbackRate = 2.0;
+            }
+        }
+
+        function handlePressEnd() {
+            if (isPressing) {
+                isPressing = false;
+                // 松开后恢复到之前选择的原始倍速
+                player.playbackRate = originalPlaybackRate;
+            }
+        }
+
+        // 5. 新增：双击视频区域播放/暂停（核心）
         videoContainer.addEventListener('click', (e) => {
-            // 排除控制按钮区域的点击
+            // 排除控制按钮区域的点击（避免冲突）
             if (e.target === playPauseBtn || Array.from(speedBtns).includes(e.target)) {
                 return;
             }
             
             const currentTime = new Date().getTime();
+            // 两次点击间隔小于300ms判定为双击
             const isDoubleClick = currentTime - lastClickTime < 300;
             
             if (isDoubleClick) {
+                // 双击：执行播放/暂停
                 togglePlayPause();
+                // 重置点击时间，避免连续双击触发多次
                 lastClickTime = 0;
             } else {
+                // 非双击：记录当前点击时间
                 lastClickTime = currentTime;
             }
         });
