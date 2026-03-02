@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>iPad本地视频播放器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        /* 视频容器 */
+        .video-container {
+            width: 100%;
+            height: calc(100vh - 120px);
+            position: relative;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        /* 顶部文件选择栏 */
+        .file-select {
+            width: 100%;
+            height: 40px;
+            background: #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 20px;
+        }
+        #fileInput {
+            display: none; /* 隐藏原生文件选择框 */
+        }
+        .file-btn {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #007aff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .file-name {
+            color: white;
+            margin-left: 15px;
+            font-size: 14px;
+            max-width: 60%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* 控制栏 */
+        .controls {
+            width: 100%;
+            height: 80px;
+            background: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 0 20px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: #007aff;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            flex: 1;
+        }
+        button:hover {
+            background: #0066cc;
+        }
+        .play-btn {
+            background: #34c759;
+        }
+    </style>
+</head>
+<body>
+    <!-- 本地文件选择栏 -->
+    <div class="file-select">
+        <label for="fileInput" class="file-btn">选择本地视频</label>
+        <input type="file" id="fileInput" accept="video/mp4,video/m4v,video/avi,video/mov">
+        <span class="file-name" id="fileName">未选择文件</span>
+    </div>
+
+    <!-- 视频容器 -->
+    <div class="video-container" id="videoContainer">
+        <video id="player" controls preload="metadata">
+            你的浏览器不支持HTML5视频播放
+        </video>
+    </div>
+
+    <!-- 控制栏 -->
+    <div class="controls">
+        <button class="speed-btn" data-speed="1.0">1.0x</button>
+        <button class="speed-btn" data-speed="1.5">1.5x</button>
+        <button class="speed-btn" data-speed="2.0">2.0x</button>
+        <button class="speed-btn" data-speed="2.5">2.5x</button>
+        <button class="speed-btn" data-speed="3.0">3.0x</button>
+        <button class="play-btn" id="playPauseBtn">播放</button>
+    </div>
+
+    <script>
+        // 获取核心元素
+        const player = document.getElementById('player');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const speedBtns = document.querySelectorAll('.speed-btn');
+        const videoContainer = document.getElementById('videoContainer');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+
+        // 新增：保存原始倍速（用于长按后恢复）
+        let originalPlaybackRate = 1.0;
+
+        // 1. 本地文件选择功能
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // 显示选中的文件名
+            fileName.textContent = file.name;
+
+            // 将本地文件转换为临时URL
+            const videoUrl = URL.createObjectURL(file);
+            player.src = videoUrl;
+
+            // 重置播放状态
+            playPauseBtn.textContent = '播放';
+            originalPlaybackRate = 1.0; // 重置原始倍速
+            player.playbackRate = originalPlaybackRate;
+            speedBtns.forEach(b => b.style.background = '#007aff');
+            speedBtns[0].style.background = '#0056b3';
+        });
+
+        // 2. 播放/暂停功能
+        playPauseBtn.addEventListener('click', () => {
+            // 未选择文件时提示
+            if (!player.src) {
+                alert('请先选择本地视频文件！');
+                return;
+            }
+
+            if (player.paused) {
+                player.play();
+                playPauseBtn.textContent = '暂停';
+            } else {
+                player.pause();
+                playPauseBtn.textContent = '播放';
+            }
+        });
+
+        // 3. 倍速调节功能
+        speedBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!player.src) {
+                    alert('请先选择本地视频文件！');
+                    return;
+                }
+
+                const speed = parseFloat(btn.dataset.speed);
+                originalPlaybackRate = speed; // 更新原始倍速
+                player.playbackRate = originalPlaybackRate;
+                speedBtns.forEach(b => b.style.background = '#007aff');
+                btn.style.background = '#0056b3';
+            });
+        });
+
+        // 4. 长按右侧以2倍速播放（核心修改）
+        let isPressing = false;
+
+        // 触摸/鼠标按下
+        videoContainer.addEventListener('touchstart', handlePressStart);
+        videoContainer.addEventListener('mousedown', handlePressStart);
+
+        // 触摸/鼠标抬起
+        videoContainer.addEventListener('touchend', handlePressEnd);
+        videoContainer.addEventListener('mouseup', handlePressEnd);
+        videoContainer.addEventListener('mouseleave', handlePressEnd);
+
+        function handlePressStart(e) {
+            if (!player.src || player.paused) return;
+
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const containerWidth = videoContainer.offsetWidth;
+
+            // 仅右侧区域触发
+            if (x > containerWidth * 0.5) {
+                isPressing = true;
+                // 长按后临时将倍速改为2.0（不管当前选的是多少倍速）
+                player.playbackRate = 2.0;
+            }
+        }
+
+        function handlePressEnd() {
+            if (isPressing) {
+                isPressing = false;
+                // 松开后恢复到之前选择的原始倍速
+                player.playbackRate = originalPlaybackRate;
+            }
+        }
+
+        // 视频结束重置
+        player.addEventListener('ended', () => {
+            playPauseBtn.textContent = '播放';
+            originalPlaybackRate = 1.0;
+            player.playbackRate = originalPlaybackRate;
+            speedBtns.forEach(b => b.style.background = '#007aff');
+            speedBtns[0].style.background = '#0056b3';
+        });
+    </script>
+</body>
+</html>
